@@ -2,6 +2,11 @@ package ch.imail.core.mail
 
 enum class ConnectionSecurity { SSL_TLS, STARTTLS }
 
+enum class AuthType { PASSWORD, OAUTH2 }
+
+/** Supplies the password or a fresh OAuth2 access token on every connection attempt. */
+fun interface SecretProvider { fun get(): String }
+
 data class ServerConfig(val host: String, val port: Int, val security: ConnectionSecurity)
 
 data class Account(
@@ -10,6 +15,10 @@ data class Account(
     val imap: ServerConfig,
     val smtp: ServerConfig,
     val displayName: String = "",
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val auth: AuthType = AuthType.PASSWORD,
+    /** OAuth provider id (see [ch.imail.core.oauth.OAuthProviders]) when [auth] is OAUTH2. */
+    val oauthProvider: String? = null,
 )
 
 enum class FolderRole { INBOX, SENT, DRAFTS, TRASH, ARCHIVE, JUNK, OTHER }

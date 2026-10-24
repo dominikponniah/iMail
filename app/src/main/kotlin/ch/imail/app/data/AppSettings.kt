@@ -13,8 +13,12 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("push", true)
         set(v) = prefs.edit().putBoolean("push", v).apply()
 
-    /** Highest inbox UID already notified, so the fallback poller does not repeat notifications. */
-    var lastNotifiedUid: Long
-        get() = prefs.getLong("last_uid", 0L)
-        set(v) = prefs.edit().putLong("last_uid", v).apply()
+    var activeAccountId: String?
+        get() = prefs.getString("active_account", null)
+        set(v) = prefs.edit().putString("active_account", v).apply()
+
+    /** Highest inbox UID already notified per account, so the fallback poller does not repeat notifications. */
+    fun lastNotifiedUid(accountId: String): Long = prefs.getLong("last_uid_$accountId", 0L)
+    fun setLastNotifiedUid(accountId: String, uid: Long) = prefs.edit().putLong("last_uid_$accountId", uid).apply()
+    fun forget(accountId: String) = prefs.edit().remove("last_uid_$accountId").apply()
 }

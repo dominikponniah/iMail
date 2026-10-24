@@ -4,6 +4,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// OAuth client IDs are public identifiers you register yourself; read from env or local.properties (never committed).
+val localProps = java.util.Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun cfg(name: String): String = System.getenv(name) ?: localProps.getProperty(name) ?: ""
+
 android {
     namespace = "ch.imail.app"
     compileSdk = 35
@@ -13,7 +19,12 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${cfg("GOOGLE_CLIENT_ID")}\"")
+        buildConfigField("String", "MICROSOFT_CLIENT_ID", "\"${cfg("MICROSOFT_CLIENT_ID")}\"")
+        manifestPlaceholders["appAuthRedirectScheme"] = "ch.imail.app"
+        manifestPlaceholders["googleRedirectScheme"] = cfg("GOOGLE_CLIENT_ID").removeSuffix(".apps.googleusercontent.com")
+            .let { if (it.isBlank()) "ch.imail.app.unconfigured" else "com.googleusercontent.apps.$it" }
     }
 
     buildTypes {
@@ -28,7 +39,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     packaging {
         resources.excludes += setOf("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES", "META-INF/INDEX.LIST", "META-INF/*.kotlin_module")
     }
@@ -49,5 +60,6 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("net.openid:appauth:0.11.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

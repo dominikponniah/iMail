@@ -1,5 +1,6 @@
 package ch.imail.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,9 +32,11 @@ import ch.imail.core.logo.FreemailDomains
 import ch.imail.core.mail.Account
 import ch.imail.core.mail.ConnectionSecurity
 import ch.imail.core.mail.ServerConfig
+import ch.imail.core.oauth.OAuthProvider
+import ch.imail.core.oauth.OAuthProviders
 
 @Composable
-fun SetupScreen(vm: MailViewModel) {
+fun SetupScreen(vm: MailViewModel, onOAuth: (OAuthProvider) -> Unit, onCancel: (() -> Unit)?) {
     val c = LocalIos.current
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -58,7 +61,20 @@ fun SetupScreen(vm: MailViewModel) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
         Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
+            if (onCancel != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Start) { NavText("Abbrechen", onClick = onCancel) }
             LargeTitle("Konto hinzufügen")
+            GroupedSection(header = "Mit Anbieter anmelden", footer = "Sichere Anmeldung im Browser (OAuth2). Dein Passwort erhält iMail nie.") {
+                OAuthProviders.all.forEachIndexed { i, p ->
+                    if (i > 0) InsetDivider()
+                    val ready = vm.isOAuthConfigured(p)
+                    Text(
+                        if (ready) p.displayName else p.displayName + " – Client-ID fehlt (siehe README)",
+                        style = IosType.body, color = if (ready) c.blue else c.tertiaryLabel,
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = ready && !vm.setupBusy) { onOAuth(p) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                }
+            }
+            Text("Oder mit Passwort", style = IosType.footnote, color = c.secondaryLabel, modifier = Modifier.padding(start = 32.dp, top = 8.dp))
             GroupedSection(footer = "Zugangsdaten werden verschlüsselt im Android Keystore gespeichert. Verbindungen sind ausschliesslich TLS-gesichert.") {
                 FieldRow("Name", name, { name = it }, "Optional")
                 InsetDivider()
@@ -90,7 +106,7 @@ fun SetupScreen(vm: MailViewModel) {
                 if (vm.setupBusy) CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                 else PillButton("Anmelden", enabled = valid) {
                     vm.error = null
-                    vm.signIn(
+                    vm.signInWithPassword(
                         Account(
                             email = email, username = email, displayName = name.trim(),
                             imap = ServerConfig(imapHost, port!!, if (port == 143) ConnectionSecurity.STARTTLS else ConnectionSecurity.SSL_TLS),

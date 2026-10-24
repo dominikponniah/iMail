@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -96,7 +98,7 @@ fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String, 
         modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(10.dp)).background(c.fill).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, null, tint = c.secondaryLabel, modifier = Modifier.size(18.dp))
+        androidx.compose.material3.Icon(Icons.Filled.Search, null, tint = c.secondaryLabel, modifier = Modifier.size(18.dp))
         BasicTextField(
             value = value, onValueChange = onChange, singleLine = true, textStyle = IosType.body.copy(color = c.label), cursorBrush = SolidColor(c.blue),
             modifier = Modifier.weight(1f),

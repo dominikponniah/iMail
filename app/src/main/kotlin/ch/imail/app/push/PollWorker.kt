@@ -18,18 +18,19 @@ import java.util.concurrent.TimeUnit
 class PollWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val app = applicationContext as ImailApp
-        val login = app.credentials.load() ?: return@withContext Result.success()
-        try {
-            val newer = ImapClient(login.account, login.password).listMessages("INBOX", 20)
-                .filter { !it.seen && it.uid > app.settings.lastNotifiedUid }
-            if (newer.isNotEmpty()) {
-                app.settings.lastNotifiedUid = newer.maxOf { it.uid }
-                Notifier.newMail(applicationContext, newer, hideContent = app.settings.appLockEnabled)
-            }
-            Result.success()
-        } catch (_: Exception) {
-            Result.retry()
+        var failed = false
+        for (stored in app.credentials.all()) {
+            val account = stored.account
+            try {
+                val newer = ImapClient(account, app.secretFor(account.id)).listMessages("INBOX", 20)
+                    .filter { !it.seen && it.uid > app.settings.lastNotifiedUid(account.id) }
+                if (newer.isNotEmpty()) {
+                    app.settings.setLastNotifiedUid(account.id, newer.maxOf { it.uid })
+                    Notifier.newMail(applicationContext, account, newer, hideContent = app.settings.appLockEnabled)
+                }
+            } catch (_: Exception) { failed = true }
         }
+        if (failed) Result.retry() else Result.success()
     }
 
     companion object {

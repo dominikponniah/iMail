@@ -78,7 +78,8 @@ fun MailApp(vm: MailViewModel, width: WindowWidthSizeClass, lockEnabled: Boolean
 
     Box(Modifier.fillMaxSize()) {
         val folders = @Composable { m: Modifier -> FolderPane(vm, m, onSettings = { showSettings = true }) }
-        val list = @Composable { m: Modifier -> MessageListPane(vm, m, onCompose = { composing = ComposeSeed() }, onBack = if (!threeColumns) ({ vm.phonePane = PhonePane.FOLDERS }) else null) }
+        val list = @Composable { m: Modifier -> MessageListPane(vm, m, onCompose = { composing = ComposeSeed() },
+            onOpen = { msg -> if (vm.inDrafts) vm.editDraft(msg.uid) { composing = it } else vm.openMessage(msg.uid) }, onBack = if (!threeColumns) ({ vm.phonePane = PhonePane.FOLDERS }) else null) }
         val detail = @Composable { m: Modifier -> DetailPane(vm, m, onReply = { composing = it }, showBack = !wide) }
 
         if (!wide) {
@@ -119,6 +120,23 @@ private fun FolderPane(vm: MailViewModel, modifier: Modifier, onSettings: () -> 
         LargeTitle("Postfächer")
         LazyColumn {
             item {
+                GroupedSection(header = "Konten") {
+                    vm.accounts.forEachIndexed { i, a ->
+                        if (i > 0) InsetDivider(start = 56)
+                        Row(
+                            Modifier.fillMaxWidth().clickable { if (a.id != vm.activeId) vm.switchAccount(a.id) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SenderAvatar(a.email, a.displayName.ifBlank { null }, size = 32.dp, lookupLogo = false)
+                            Text(a.email, style = IosType.body, color = c.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp).weight(1f))
+                            if (a.id == vm.activeId) Text("✓", style = IosType.body, color = c.blue)
+                        }
+                    }
+                    InsetDivider()
+                    Text("Konto hinzufügen", style = IosType.body, color = c.blue, modifier = Modifier.fillMaxWidth().clickable { vm.addingAccount = true }.padding(horizontal = 16.dp, vertical = 12.dp))
+                }
+            }
+            item {
                 GroupedSection {
                     vm.folders.forEachIndexed { i, f ->
                         if (i > 0) InsetDivider(start = 56)
@@ -158,7 +176,7 @@ private fun FolderRow(f: MailFolder, selected: Boolean, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MessageListPane(vm: MailViewModel, modifier: Modifier, onCompose: () -> Unit, onBack: (() -> Unit)?) {
+private fun MessageListPane(vm: MailViewModel, modifier: Modifier, onCompose: () -> Unit, onOpen: (MessageSummary) -> Unit, onBack: (() -> Unit)?) {
     val c = LocalIos.current
     val title = vm.folders.firstOrNull { it.fullName == vm.folder }?.let { f ->
         if (f.role == FolderRole.INBOX) "Eingang" else f.displayName
@@ -169,6 +187,10 @@ private fun MessageListPane(vm: MailViewModel, modifier: Modifier, onCompose: ()
             Row { NavText("Aktualisieren") { vm.loadMessages() }; NavText("Neu", bold = true, onClick = onCompose) }
         }
         LargeTitle(title)
+        if (vm.offline) Text(
+            "Offline – gespeicherte E-Mails", style = IosType.footnote, color = c.secondaryLabel,
+            modifier = Modifier.fillMaxWidth().background(c.fill).padding(horizontal = 16.dp, vertical = 6.dp),
+        )
         SearchField(vm.query, vm::search, "Suchen")
         LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
             items(vm.messages, key = { it.uid }) { m ->
@@ -186,7 +208,7 @@ private fun MessageListPane(vm: MailViewModel, modifier: Modifier, onCompose: ()
                         contentAlignment = if (dir == SwipeToDismissBoxValue.EndToStart) Alignment.CenterEnd else Alignment.CenterStart,
                     ) { Text(if (dir == SwipeToDismissBoxValue.EndToStart) "Löschen" else if (m.seen) "Ungelesen" else "Gelesen", color = androidx.compose.ui.graphics.Color.White, style = IosType.headline) }
                 }) {
-                    MessageRow(m, selected = vm.open?.summary?.uid == m.uid) { vm.openMessage(m.uid) }
+                    MessageRow(m, selected = vm.open?.summary?.uid == m.uid) { onOpen(m) }
                 }
                 InsetDivider(start = 72)
             }

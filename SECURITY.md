@@ -11,7 +11,9 @@ Vertraulichkeit der Zugangsdaten und Mails auf dem Gerät und im Netz, Integrit�
 |---|---|---|
 | Mitlesen/Manipulation im Netz, Downgrade | Nur TLS 1.2/1.3. IMAPS/SMTPS oder STARTTLS mit `starttls.required`. Zertifikat- und Hostnamen-Prüfung (`ssl.checkserveridentity`). Kein Klartext-Port wählbar, kein Trust-All. `network_security_config`: `cleartextTrafficPermitted=false`, nur System-CAs. | `MailSession.kt`, `network_security_config.xml` |
 | Passwortdiebstahl auf dem Gerät | AES-256-GCM, Schlüssel im Android Keystore (nicht exportierbar). Kein Klartext in Prefs, Logs oder Backup (`allowBackup=false`, Extraktionsregeln leer). | `CredentialStore.kt` |
-| Mail-Inhalte auf dem Datenträger | Es wird bewusst **kein** Mail-Cache geschrieben; Inhalte liegen nur im Arbeitsspeicher. Auf Disk liegen nur Firmenlogos (öffentliche Daten, Dateinamen als Hash). | `MailRepository.kt`, `DiskLogoCache.kt` |
+| Mail-Inhalte auf dem Datenträger (Offline-Cache) | Jede Cache-Datei ist AES-256-GCM-verschlüsselt (eigener, nicht exportierbarer Keystore-Schlüssel), atomar geschrieben, mit Hash-Dateinamen (keine Ordner-/UID-Namen im Klartext). Beschädigte oder mit anderem Schlüssel verschlüsselte Dateien gelten als Cache-Miss und werden gelöscht. Begrenzt (200 Kopfzeilen/Ordner, 300 Texte, Anhänge ≤ 2 MB). Beim Entfernen eines Kontos wird sein Cache gelöscht. Logos (öffentliche Daten) liegen separat unter Hash-Namen. | `MailCache.kt`, `CacheCrypto.kt`, `DiskLogoCache.kt` |
+| OAuth2 | Authorization Code mit PKCE (S256) und `state` im Systembrowser (AppAuth), nie eingebettete WebView. Nur XOAUTH2 wird angeboten, nie PLAIN/LOGIN mit Token. Nur der Refresh-Token-Zustand wird gespeichert (verschlüsselt), Access-Tokens nur kurzlebig pro Verbindung. Client-IDs stehen nicht im Repo. Der Redirect-Empfänger ist exportiert (technisch nötig), akzeptiert aber nur Antworten mit passendem `state`/PKCE. | `OAuthManager.kt`, `MailSession.kt` |
+| Mehrere Konten | Eigene Push-Verbindung, eigener Cache-Ordner und eigene Benachrichtigungs-Gruppe pro Konto; Cache und letzte UID werden beim Entfernen gelöscht. | `ImailApp.kt`, `MailPushService.kt` |
 | Bösartiges HTML (Skripte, Formulare, Tracking) | jsoup-Allowlist, kein JavaScript, kein File-/Content-Zugriff, WebView navigiert nie selbst, CSP im Dokument, Remote-Bilder standardmässig blockiert (Opt-in pro Mail), SVG nie geladen. | `HtmlSanitizer.kt`, `DetailPane.kt` |
 | Phishing/gefährliche Links | Nur `https`, `mailto`, `tel`. Bestätigungsdialog mit Zielhost vor dem Öffnen. | `LinkPolicy.kt` |
 | Gefährliche Anhänge | Dateinamen bereinigt (Path Traversal, Steuerzeichen, Länge). Speichern nur über Storage Access Framework. Warnung bei ausführbaren Typen. Grössenlimits (Empfang 25 MB, Senden 15 MB). Kein automatisches Öffnen. | `FileNameSanitizer.kt`, `ImapClient.kt` |
@@ -25,6 +27,7 @@ Vertraulichkeit der Zugangsdaten und Mails auf dem Gerät und im Netz, Integrit�
 ## Bewusste Einschränkungen
 - Der Keystore-Schlüssel verlangt keine Nutzerauthentifizierung, weil der Push-Dienst im Hintergrund lesen muss. Schutz der UI: App-Sperre.
 - Ein ständiger IDLE-Dienst kostet Akku; Android kann ihn trotz Foreground-Service beenden. Fallback: WorkManager (~15 Min.). Für Play-Store-Veröffentlichung ist die Foreground-Service-Art `specialUse` zu begründen.
-- Kein OAuth2: Anbieter, die nur OAuth erlauben (z. B. Gmail ohne App-Passwort), funktionieren mit App-Passwörtern.
+- Der Offline-Cache enthält Mail-Texte; wer das entsperrte Gerät samt App-Sandbox kontrolliert (Root), kann den Keystore-Schlüssel benutzen. Die App-Sperre schützt die Oberfläche, nicht die Dateien selbst.
+- Aktionen ohne Verbindung (Senden, Löschen, Flags) werden nicht zwischengespeichert.
 - Kein S/MIME/PGP, keine Zertifikats-Pinning-Konfiguration pro Server.
 - Abhängigkeiten sind auf feste Versionen gepinnt; vor Releases auf bekannte CVEs prüfen.

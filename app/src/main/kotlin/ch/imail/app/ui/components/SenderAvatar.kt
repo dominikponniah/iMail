@@ -30,9 +30,10 @@ import kotlinx.coroutines.withContext
 
 /** Company logo of the sender's domain; grey initials like iOS Contacts for freemail senders or when no logo exists. */
 @Composable
-fun SenderAvatar(address: String, name: String?, size: Dp = 40.dp, modifier: Modifier = Modifier) {
+fun SenderAvatar(address: String, name: String?, size: Dp = 40.dp, modifier: Modifier = Modifier, lookupLogo: Boolean = true) {
     val app = LocalContext.current.applicationContext as ImailApp
-    val logo by produceState<ImageBitmap?>(null, address) {
+    val logo by produceState<ImageBitmap?>(null, address, lookupLogo) {
+        if (!lookupLogo) return@produceState
         value = withContext(Dispatchers.IO) { app.logos.logoFor(address)?.let { decodeDefensively(it.bytes) }?.asImageBitmap() }
     }
     val shape = CircleShape
@@ -43,10 +44,19 @@ fun SenderAvatar(address: String, name: String?, size: Dp = 40.dp, modifier: Mod
         }
     } else {
         Box(
-            modifier.size(size).clip(shape).background(Brush.verticalGradient(listOf(Color(0xFFA5ABB8), Color(0xFF858B98)))),
+            modifier.size(size).clip(shape).background(Brush.verticalGradient(avatarGradient(address))),
             contentAlignment = Alignment.Center,
         ) { Text(initials(name, address), color = Color.White, fontSize = (size.value * 0.4f).sp) }
     }
+}
+
+/**
+ * A vivid colour per sender: derived from a hash of the address, so it looks random but stays the same
+ * for the same sender on every screen and after every restart.
+ */
+internal fun avatarGradient(key: String): List<Color> {
+    val h = (key.lowercase().hashCode().toLong() and 0x7fffffff) % 360
+    return listOf(Color.hsv(h.toFloat(), 0.55f, 0.92f), Color.hsv(h.toFloat(), 0.75f, 0.74f))
 }
 
 internal fun initials(name: String?, address: String): String {

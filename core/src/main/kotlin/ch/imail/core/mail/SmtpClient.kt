@@ -14,30 +14,35 @@ import java.util.Date
 
 class SmtpClient internal constructor(
     private val account: Account,
-    private val password: String,
+    private val secret: SecretProvider,
     private val overrides: TlsOverrides?,
 ) {
-    constructor(account: Account, password: String) : this(account, password, null)
+    constructor(account: Account, password: String) : this(account, SecretProvider { password }, null)
+    constructor(account: Account, secret: SecretProvider) : this(account, secret, null)
+    internal constructor(account: Account, password: String, overrides: TlsOverrides?) : this(account, SecretProvider { password }, overrides)
 
-    private val session: Session get() = MailSession.create("smtp", account.smtp, overrides)
+    private val session: Session get() = MailSession.create("smtp", account.smtp, overrides, account.auth)
 
     fun testConnection() {
-        session.getTransport("smtp").apply { connect(account.smtp.host, account.smtp.port, account.username, password); close() }
+        session.getTransport("smtp").apply { connect(account.smtp.host, account.smtp.port, account.username, secret.get()); close() }
     }
 
     /** Validates every address, strips header-injection characters and sends. Returns the sent message for the "Sent" folder. */
     fun send(mail: OutgoingMail): MimeMessage {
-        val msg = build(mail)
+        val msg = OutgoingMessageBuilder.build(session, account, mail)
         val transport = session.getTransport("smtp")
         try {
-            transport.connect(account.smtp.host, account.smtp.port, account.username, password)
+            transport.connect(account.smtp.host, account.smtp.port, account.username, secret.get())
             transport.sendMessage(msg, msg.allRecipients)
         } finally { runCatching { transport.close() } }
         return msg
     }
+}
 
-    internal fun build(mail: OutgoingMail): MimeMessage {
-        require(mail.to.isNotEmpty()) { "Kein Empfänger" }
+/** Builds a MIME message from user input; shared by sending and draft saving. */
+internal object OutgoingMessageBuilder {
+    fun build(session: Session, account: Account, mail: OutgoingMail, allowEmptyRecipients: Boolean = false): MimeMessage {
+        require(allowEmptyRecipients || mail.to.isNotEmpty()) { "Kein Empfänger" }
         val msg = MimeMessage(session)
         val from = HeaderSanitizer.requireValidAddress(account.email)
         if (account.displayName.isNotBlank()) from.personal = HeaderSanitizer.cleanValue(account.displayName)

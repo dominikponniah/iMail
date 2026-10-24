@@ -12,11 +12,11 @@ import androidx.core.content.ContextCompat
 import ch.imail.app.ImailApp
 import ch.imail.app.MainActivity
 import ch.imail.app.R
+import ch.imail.core.mail.Account
 import ch.imail.core.mail.MessageSummary
 
 object Notifier {
     private const val SERVICE_ID = 1
-    private const val MAIL_ID = 2
 
     fun serviceNotification(ctx: Context): Notification =
         NotificationCompat.Builder(ctx, ImailApp.CHANNEL_SERVICE)
@@ -31,7 +31,7 @@ object Notifier {
     val serviceId get() = SERVICE_ID
 
     /** With the app lock active (or a locked screen) no sender/subject is revealed in the notification. */
-    fun newMail(ctx: Context, mails: List<MessageSummary>, hideContent: Boolean) {
+    fun newMail(ctx: Context, account: Account, mails: List<MessageSummary>, hideContent: Boolean) {
         if (mails.isEmpty() || Build_notificationsDenied(ctx)) return
         val open = PendingIntent.getActivity(
             ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -56,8 +56,10 @@ object Notifier {
             .setCategory(NotificationCompat.CATEGORY_EMAIL)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(generic)
+            .setSubText(if (hideContent) null else account.email)
+            .setGroup(account.id)
             .build()
-        try { NotificationManagerCompat.from(ctx).notify(MAIL_ID, n) } catch (_: SecurityException) { }
+        try { NotificationManagerCompat.from(ctx).notify(account.id, 0, n) } catch (_: SecurityException) { }
     }
 
     @Suppress("FunctionName")

@@ -19,15 +19,16 @@ import ch.imail.core.mail.ImapIdleWatcher
  * No Google/FCM and no third-party server: mail metadata only ever travels between the device and the user's mail server.
  */
 class MailPushService : Service() {
-    private var watcher: ImapIdleWatcher? = null
-    private var thread: Thread? = null
+    private class Watch(val watcher: ImapIdleWatcher, val thread: Thread)
+    private val watches = mutableListOf<Watch>()
     private val connectivity by lazy { getSystemService(ConnectivityManager::class.java) }
+    private var registered = false
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        // A network change silently kills the TCP connection; drop it so the watcher reconnects immediately.
+        // A network change silently kills the TCP connections; drop them so the watchers reconnect immediately.
         private var first = true
         override fun onAvailable(network: Network) {
             if (first) { first = false; return } // fires once on registration
-            restartWatcher()
+            restartWatchers()
         }
     }
 
@@ -35,7 +36,7 @@ class MailPushService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val app = application as ImailApp
-        if (!app.settings.pushEnabled || app.credentials.load() == null) {
+        if (!app.settings.pushEnabled || app.credentials.all().isEmpty()) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -43,36 +44,37 @@ class MailPushService : Service() {
             this, Notifier.serviceId, Notifier.serviceNotification(this),
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
         )
-        if (thread == null) {
-            startWatcher()
-            connectivity.registerDefaultNetworkCallback(networkCallback)
-        }
+        restartWatchers()
+        if (!registered) { connectivity.registerDefaultNetworkCallback(networkCallback); registered = true }
         return START_STICKY
     }
 
-    private fun startWatcher() {
+    /** One IDLE connection per account. */
+    @Synchronized private fun restartWatchers() {
+        stopWatchers()
         val app = application as ImailApp
-        val login = app.credentials.load() ?: return stopSelf()
-        val w = ImapIdleWatcher(
-            client = ImapClient(login.account, login.password),
-            onNewMail = { mails ->
-                app.settings.lastNotifiedUid = maxOf(app.settings.lastNotifiedUid, mails.maxOf { it.uid })
-                Notifier.newMail(this, mails, hideContent = app.settings.appLockEnabled)
-            },
-        )
-        watcher = w
-        thread = Thread(w::run, "imail-idle").apply { isDaemon = true; start() }
+        for (stored in app.credentials.all()) {
+            val account = stored.account
+            val w = ImapIdleWatcher(
+                client = ImapClient(account, app.secretFor(account.id)),
+                onNewMail = { mails ->
+                    app.settings.setLastNotifiedUid(account.id, maxOf(app.settings.lastNotifiedUid(account.id), mails.maxOf { it.uid }))
+                    Notifier.newMail(this, account, mails, hideContent = app.settings.appLockEnabled)
+                },
+            )
+            watches += Watch(w, Thread(w::run, "imail-idle-${account.id.take(6)}").apply { isDaemon = true; start() })
+        }
     }
 
-    @Synchronized private fun restartWatcher() {
-        watcher?.stop()
-        thread?.join(2000)
-        if (!Thread.currentThread().isInterrupted) startWatcher()
+    private fun stopWatchers() {
+        watches.forEach { it.watcher.stop() }
+        watches.forEach { it.thread.join(2000) }
+        watches.clear()
     }
 
     override fun onDestroy() {
-        runCatching { connectivity.unregisterNetworkCallback(networkCallback) }
-        watcher?.stop()
+        if (registered) runCatching { connectivity.unregisterNetworkCallback(networkCallback) }
+        stopWatchers()
         super.onDestroy()
     }
 
@@ -83,5 +85,8 @@ class MailPushService : Service() {
         }
 
         fun stop(ctx: Context) { ctx.stopService(Intent(ctx, MailPushService::class.java)) }
+
+        /** Picks up added/removed accounts. */
+        fun restart(ctx: Context) { stop(ctx); start(ctx) }
     }
 }

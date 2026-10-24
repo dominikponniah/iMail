@@ -4,6 +4,7 @@ import jakarta.mail.FetchProfile
 import jakarta.mail.Flags
 import jakarta.mail.Folder
 import jakarta.mail.Message
+import jakarta.mail.Session
 import jakarta.mail.Store
 import jakarta.mail.UIDFolder
 import jakarta.mail.internet.InternetAddress
@@ -14,20 +15,23 @@ import jakarta.mail.search.SubjectTerm
 import org.eclipse.angus.mail.imap.IMAPFolder
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.util.Properties
 
 class AttachmentTooLargeException : Exception("Anhang zu gross")
 
 /** Blocking IMAP operations. Each call opens its own short-lived connection; call from a background thread. */
 class ImapClient internal constructor(
     private val account: Account,
-    private val password: String,
+    private val secret: SecretProvider,
     private val overrides: TlsOverrides?,
 ) {
-    constructor(account: Account, password: String) : this(account, password, null)
+    constructor(account: Account, password: String) : this(account, SecretProvider { password }, null)
+    constructor(account: Account, secret: SecretProvider) : this(account, secret, null)
+    internal constructor(account: Account, password: String, overrides: TlsOverrides?) : this(account, SecretProvider { password }, overrides)
 
     internal fun connect(): Store {
-        val store = MailSession.create("imap", account.imap, overrides).getStore("imap")
-        store.connect(account.imap.host, account.imap.port, account.username, password)
+        val store = MailSession.create("imap", account.imap, overrides, account.auth).getStore("imap")
+        store.connect(account.imap.host, account.imap.port, account.username, secret.get())
         return store
     }
 
@@ -49,15 +53,7 @@ class ImapClient internal constructor(
         store.defaultFolder.list("*").map { f ->
             f as IMAPFolder
             val attrs = f.attributes.toSet()
-            val role = when {
-                f.fullName.equals("INBOX", true) -> FolderRole.INBOX
-                "\\Sent" in attrs -> FolderRole.SENT
-                "\\Drafts" in attrs -> FolderRole.DRAFTS
-                "\\Trash" in attrs -> FolderRole.TRASH
-                "\\Archive" in attrs || "\\All" in attrs -> FolderRole.ARCHIVE
-                "\\Junk" in attrs -> FolderRole.JUNK
-                else -> FolderRole.OTHER
-            }
+            val role = roleOf(f.fullName, f.name, attrs)
             val selectable = "\\Noselect" !in attrs
             MailFolder(f.fullName, f.name, role, if (selectable) runCatching { f.unreadMessageCount }.getOrDefault(0) else 0)
         }.sortedBy { it.role.ordinal }
@@ -103,13 +99,13 @@ class ImapClient internal constructor(
         )
     }
 
-    fun fetchMessage(folderName: String, uid: Long): MessageBody = withFolder(folderName, readWrite = true) { folder ->
+    fun fetchMessage(folderName: String, uid: Long, markSeen: Boolean = true): MessageBody = withFolder(folderName, readWrite = markSeen) { folder ->
         val m = folder.getMessageByUID(uid) as? MimeMessage ?: throw NoSuchElementException("Nachricht nicht gefunden")
         val parts = MessageParts.parse(m)
-        m.setFlag(Flags.Flag.SEEN, true)
+        if (markSeen) m.setFlag(Flags.Flag.SEEN, true)
         fun addrs(t: Message.RecipientType) = (m.getRecipients(t) ?: emptyArray()).filterIsInstance<InternetAddress>().map { MailAddress(it.personal, it.address ?: "") }
         MessageBody(
-            summary = toSummary(folder, m).copy(seen = true),
+            summary = toSummary(folder, m).let { if (markSeen) it.copy(seen = true) else it },
             to = addrs(Message.RecipientType.TO),
             cc = addrs(Message.RecipientType.CC),
             messageId = m.messageID,
@@ -145,27 +141,75 @@ class ImapClient internal constructor(
         f.getMessageByUID(uid)?.setFlag(Flags.Flag.SEEN, seen)
     }
 
-    /** Moves to the trash folder (copy + delete) or deletes permanently when already in trash or none exists. */
+    /** Moves to the trash folder (copy + delete) or deletes permanently when already in trash, in drafts, or no trash exists. */
     fun delete(folderName: String, uid: Long) = withStore { store ->
-        val trash = store.defaultFolder.list("*").map { it as IMAPFolder }.firstOrNull { "\\Trash" in it.attributes }
+        val trash = findFolder(store, FolderRole.TRASH)
         val folder = store.getFolder(folderName) as IMAPFolder
+        val permanent = roleOf(folder.fullName, folder.name, folder.attributes.toSet()) == FolderRole.DRAFTS
         folder.open(Folder.READ_WRITE)
         try {
             val m = folder.getMessageByUID(uid) ?: return@withStore
-            if (trash != null && trash.fullName != folder.fullName) folder.copyMessages(arrayOf(m), trash)
+            if (!permanent && trash != null && trash.fullName != folder.fullName) folder.copyMessages(arrayOf(m), trash)
             m.setFlag(Flags.Flag.DELETED, true)
             folder.expunge()
         } finally { runCatching { folder.close(true) } }
     }
 
-    /** Stores a message (sent copy or draft) in the folder with the given role, if one exists. */
+    /** Stores a copy of a sent message in the "Sent" folder, creating it if the server has none. */
     fun append(role: FolderRole, message: MimeMessage, seen: Boolean = true) = withStore { store ->
-        val attr = when (role) { FolderRole.SENT -> "\\Sent"; FolderRole.DRAFTS -> "\\Drafts"; else -> return@withStore }
-        val target = store.defaultFolder.list("*").map { it as IMAPFolder }.firstOrNull { attr in it.attributes } ?: return@withStore
+        if (role != FolderRole.SENT) return@withStore
+        val target = findOrCreate(store, role) ?: return@withStore
         message.setFlag(Flags.Flag.SEEN, seen)
-        message.setFlag(Flags.Flag.DRAFT, role == FolderRole.DRAFTS)
         target.appendMessages(arrayOf(message))
     }
 
-    companion object { private const val PREVIEW_MAX_BYTES = 300_000 }
+    /**
+     * Saves a draft in the server's Drafts folder (flag \Draft) so it appears on all devices.
+     * [replaceUid] is an earlier version of the same draft that is removed afterwards. Returns the new UID if it could be determined.
+     */
+    fun saveDraft(mail: OutgoingMail, replaceUid: Long? = null): Long? = withStore { store ->
+        val msg = OutgoingMessageBuilder.build(Session.getInstance(Properties()), account, mail, allowEmptyRecipients = true)
+        msg.setFlag(Flags.Flag.DRAFT, true)
+        msg.setFlag(Flags.Flag.SEEN, true)
+        val drafts = findOrCreate(store, FolderRole.DRAFTS) ?: throw IllegalStateException("Kein Entwürfe-Ordner")
+        drafts.open(Folder.READ_WRITE)
+        try {
+            val appended = runCatching { drafts.appendUIDMessages(arrayOf(msg)) }.getOrNull()
+            val newUid = appended?.firstOrNull()?.uid ?: drafts.messageCount.takeIf { it > 0 }?.let { drafts.getUID(drafts.getMessage(it)) }
+            replaceUid?.let { old -> drafts.getMessageByUID(old)?.setFlag(Flags.Flag.DELETED, true); drafts.expunge() }
+            newUid
+        } finally { runCatching { drafts.close(true) } }
+    }
+
+    private fun findFolder(store: Store, role: FolderRole): IMAPFolder? =
+        store.defaultFolder.list("*").map { it as IMAPFolder }.firstOrNull { roleOf(it.fullName, it.name, it.attributes.toSet()) == role }
+
+    private fun findOrCreate(store: Store, role: FolderRole): IMAPFolder? {
+        findFolder(store, role)?.let { return it }
+        val name = when (role) { FolderRole.SENT -> "Sent"; FolderRole.DRAFTS -> "Drafts"; else -> return null }
+        return (store.getFolder(name) as IMAPFolder).also { if (!it.exists()) it.create(Folder.HOLDS_MESSAGES) }
+    }
+
+    companion object {
+        private const val PREVIEW_MAX_BYTES = 300_000
+
+        private val names = mapOf(
+            FolderRole.SENT to setOf("sent", "sent items", "sent messages", "gesendet", "gesendete objekte", "gesendete elemente"),
+            FolderRole.DRAFTS to setOf("drafts", "draft", "entwürfe", "entwuerfe"),
+            FolderRole.TRASH to setOf("trash", "deleted items", "deleted messages", "papierkorb", "gelöscht", "geloescht"),
+            FolderRole.JUNK to setOf("junk", "spam", "junk e-mail", "junk email"),
+            FolderRole.ARCHIVE to setOf("archive", "archiv", "all mail"),
+        )
+
+        /** Role from the server's SPECIAL-USE attributes, falling back to common folder names. */
+        internal fun roleOf(fullName: String, name: String, attrs: Set<String>): FolderRole = when {
+            fullName.equals("INBOX", true) -> FolderRole.INBOX
+            "\\Sent" in attrs -> FolderRole.SENT
+            "\\Drafts" in attrs -> FolderRole.DRAFTS
+            "\\Trash" in attrs -> FolderRole.TRASH
+            "\\Archive" in attrs || "\\All" in attrs -> FolderRole.ARCHIVE
+            "\\Junk" in attrs -> FolderRole.JUNK
+            else -> names.entries.firstOrNull { name.lowercase() in it.value }?.key ?: FolderRole.OTHER
+        }
+    }
 }

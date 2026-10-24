@@ -32,10 +32,32 @@ import ch.imail.app.ui.screens.SetupScreen
 import ch.imail.app.ui.theme.IosTheme
 import ch.imail.app.ui.theme.IosType
 import ch.imail.app.ui.theme.LocalIos
+import ch.imail.core.oauth.OAuthProvider
+import net.openid.appauth.AuthorizationService
 
 class MainActivity : FragmentActivity() {
     private val vm: MailViewModel by viewModels()
     private var locked by mutableStateOf(false)
+
+    private var authService: AuthorizationService? = null
+    private var pendingProvider: OAuthProvider? = null
+    private val oauthResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val p = pendingProvider ?: return@registerForActivityResult
+        val data = result.data
+        val service = authService
+        if (data != null && service != null) vm.completeOAuth(p, data, service) else vm.error = "Anmeldung abgebrochen."
+    }
+
+    private fun startOAuth(p: OAuthProvider) {
+        pendingProvider = p
+        val service = authService ?: AuthorizationService(this).also { authService = it }
+        oauthResult.launch(vm.authorizationIntent(p, service))
+    }
+
+    override fun onDestroy() {
+        authService?.dispose()
+        super.onDestroy()
+    }
 
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -53,7 +75,8 @@ class MainActivity : FragmentActivity() {
                 Box(Modifier.fillMaxSize().background(LocalIos.current.background).systemBarsPadding()) {
                     when {
                         locked -> LockScreen()
-                        vm.repo == null -> SetupScreen(vm)
+                        vm.account == null -> SetupScreen(vm, ::startOAuth, onCancel = null)
+                        vm.addingAccount -> SetupScreen(vm, ::startOAuth, onCancel = { vm.addingAccount = false })
                         else -> MailApp(vm, size.widthSizeClass, onToggleLock = { toggleLock(it) }, lockEnabled = app.settings.appLockEnabled)
                     }
                 }

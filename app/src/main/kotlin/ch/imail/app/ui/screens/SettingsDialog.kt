@@ -23,7 +23,7 @@ internal fun SettingsDialog(vm: MailViewModel, lockEnabled: Boolean, onToggleLoc
     var push by remember { mutableStateOf(app.settings.pushEnabled) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(vm.repo?.account?.email.orEmpty()) },
+        title = { Text(vm.account?.email.orEmpty()) },
         text = {
             Column {
                 SwitchRow("Benachrichtigungen bei neuer E-Mail", push) { push = it; app.settings.pushEnabled = it; if (it) MailPushService.start(ctx) else MailPushService.stop(ctx) }
@@ -32,7 +32,7 @@ internal fun SettingsDialog(vm: MailViewModel, lockEnabled: Boolean, onToggleLoc
             }
         },
         confirmButton = { TextButton(onDismiss) { Text("Fertig") } },
-        dismissButton = { TextButton({ onDismiss(); vm.signOut() }) { Text("Abmelden") } },
+        dismissButton = { TextButton({ onDismiss(); vm.account?.id?.let(vm::removeAccount) }) { Text("Konto entfernen") } },
     )
 }
 

@@ -12,7 +12,7 @@ internal object MailSession {
     private const val PROTOCOLS = "TLSv1.3 TLSv1.2"
     private const val TIMEOUT_MS = "20000"
 
-    fun create(protocol: String, cfg: ServerConfig, overrides: TlsOverrides? = null): Session {
+    fun create(protocol: String, cfg: ServerConfig, overrides: TlsOverrides? = null, auth: AuthType = AuthType.PASSWORD): Session {
         require(protocol == "imap" || protocol == "smtp")
         val p = "mail.$protocol"
         val props = Properties().apply {
@@ -32,6 +32,8 @@ internal object MailSession {
             }
             overrides?.let { put("$p.ssl.socketFactory", it.socketFactory) }
             if (protocol == "smtp") put("mail.smtp.auth", "true")
+            // OAuth2: only XOAUTH2 may be used, so a token is never offered through PLAIN/LOGIN.
+            if (auth == AuthType.OAUTH2) put("$p.auth.mechanisms", "XOAUTH2")
             // Reading a preview must not mark the message as read.
             if (protocol == "imap") put("mail.imap.peek", "true")
             put("mail.mime.address.strict", "true")
