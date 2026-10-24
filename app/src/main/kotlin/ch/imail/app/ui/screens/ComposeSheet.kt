@@ -63,6 +63,18 @@ data class ComposeSeed(
 
 private const val MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
 
+/** Reads at most [max] bytes (API 26 compatible replacement for readNBytes). */
+private fun readAtMost(input: java.io.InputStream, max: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(16 * 1024)
+    while (out.size() < max) {
+        val n = input.read(buf, 0, minOf(buf.size, max - out.size()))
+        if (n < 0) break
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ComposeSheet(vm: MailViewModel, seed: ComposeSeed, onDismiss: () -> Unit) {
@@ -87,7 +99,7 @@ internal fun ComposeSheet(vm: MailViewModel, seed: ComposeSeed, onDismiss: () ->
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val name = ctx.contentResolver.query(uri, null, null, null, null)?.use { q -> if (q.moveToFirst()) q.getString(q.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null } ?: "attachment"
-        val data = ctx.contentResolver.openInputStream(uri)?.use { it.readNBytes(MAX_ATTACHMENT_BYTES + 1) }
+        val data = ctx.contentResolver.openInputStream(uri)?.use { readAtMost(it, MAX_ATTACHMENT_BYTES + 1) }
         if (data == null || data.size > MAX_ATTACHMENT_BYTES) vm.error = "Der Anhang ist zu gross (max. 15 MB)."
         else files += OutgoingAttachment(name, ctx.contentResolver.getType(uri) ?: "application/octet-stream", data)
     }

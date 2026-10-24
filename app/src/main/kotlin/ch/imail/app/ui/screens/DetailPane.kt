@@ -119,7 +119,6 @@ private fun Body(vm: MailViewModel, msg: MessageBody, modifier: Modifier) {
                         allowFileAccess = false
                         allowContentAccess = false
                         domStorageEnabled = false
-                        databaseEnabled = false
                         javaScriptCanOpenWindowsAutomatically = false
                         setSupportMultipleWindows(false)
                         setGeolocationEnabled(false)

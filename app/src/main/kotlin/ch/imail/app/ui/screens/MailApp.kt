@@ -24,7 +24,7 @@ import androidx.compose.material.icons.filled.Drafts
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Report
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -153,7 +153,7 @@ private fun FolderPane(vm: MailViewModel, modifier: Modifier, onSettings: () -> 
 
 private fun icon(role: FolderRole): ImageVector = when (role) {
     FolderRole.INBOX -> Icons.Filled.Inbox
-    FolderRole.SENT -> Icons.Filled.Send
+    FolderRole.SENT -> Icons.AutoMirrored.Filled.Send
     FolderRole.DRAFTS -> Icons.Filled.Drafts
     FolderRole.TRASH -> Icons.Filled.Delete
     FolderRole.ARCHIVE -> Icons.Filled.Archive

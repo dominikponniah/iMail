@@ -25,7 +25,7 @@ Google: Gmail-Scope `https://mail.google.com/` erfordert für Produktivbetrieb e
 ## Bauen und testen
 ```
 ./gradlew :core:test        # läuft ohne Android SDK
-./gradlew assembleDebug     # braucht ANDROID_HOME bzw. local.properties (sdk.dir)
+./gradlew assembleDebug     # braucht ANDROID_HOME bzw. local.properties (sdk.dir), Android SDK 35 + Build-Tools 35.0.0
 ./gradlew lintDebug
 ```
 `settings.gradle.kts` bindet `:app` nur ein, wenn ein Android SDK gefunden wird.
@@ -48,4 +48,5 @@ Entwürfe speichern ohne Verbindung (nur Senden/Löschen/Flags werden vorgemerkt
 
 ## Status (ehrlich)
 - **Geprüft:** `./gradlew :core:test` – 48 Tests grün (u. a. vorgemerkte Aktionen: Löschen, Gelesen-Flag und Senden offline → nach Reconnect in Reihenfolge angewendet): Freemail, Logo-Resolver/SSRF, HTML-Sanitizer, Links, Header-Injection, Dateinamen, **verschlüsselter Cache** (Round-Trip, kein Klartext auf der Platte, falscher Schlüssel/manipulierte Datei = Cache-Miss, Trimmen), **Offline-Modus** (Server gestoppt, Ordner/Liste/Suche/Texte weiter lesbar; falsches Passwort wird trotz Cache gemeldet), **Entwürfe** (speichern, ersetzen, aus Entwürfe-Ordner senden/entfernen), **XOAUTH2-Konfiguration**, ID-Token-Auswertung, sowie Integrationstests gegen lokalen IMAPS/SMTPS-Server (Abruf, Senden mit Anhang, IDLE-Push, Ablehnung selbstsignierter Zertifikate).
-- **Nicht geprüft:** `app/` wurde noch nie kompiliert und der **OAuth-Ablauf** nie gegen Google/Microsoft ausgeführt (kein Android SDK, Google-Hosts in der Entwicklungsumgebung gesperrt; XOAUTH2 gegen einen echten Server ebenfalls nicht). Ebenso offen: `lintDebug`, Previews, Verhalten auf einem Gerät (Push im Hintergrund, Biometrie, WebView, Browser-Redirect). Beim ersten Build sind Compile-Korrekturen zu erwarten.
+- **App gebaut (Android SDK 35, AGP 8.7.3):** `./gradlew :app:assembleDebug`, `:app:assembleRelease` (mit R8-Verkleinerung) und `:app:lintDebug` laufen fehlerfrei (Lint: 0 Fehler, 11 Warnungen, v. a. neuere Bibliotheksversionen). Im gemergten Release-Manifest: `allowBackup=false`, `usesCleartextTraffic=false`, Netzwerk-Sicherheitskonfiguration aktiv; exportiert sind nur `MainActivity`, der OAuth-Redirect-Empfänger und per Berechtigung geschützte Bibliotheks-Komponenten (WorkManager, ProfileInstaller).
+- **Nicht geprüft:** Start und Verhalten auf einem Gerät oder Emulator (Push im Hintergrund, Biometrie, WebView, Browser-Redirect), der **OAuth-Ablauf** gegen Google/Microsoft sowie XOAUTH2 gegen einen echten Server (auf Android fehlt `javax.security.sasl`; wir nutzen den eingebauten XOAUTH2-Pfad von Angus Mail, der ohne SASL auskommen sollte – bitte mit einem echten Konto testen), Compose-Previews/Screenshot-Tests, der Release-Build mit Signatur (liegt unsigniert vor) und die Unit-Tests des App-Moduls (es gibt keine).

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -5,7 +7,7 @@ plugins {
 }
 
 // OAuth client IDs are public identifiers you register yourself; read from env or local.properties (never committed).
-val localProps = java.util.Properties().apply {
+val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 fun cfg(name: String): String = System.getenv(name) ?: localProps.getProperty(name) ?: ""
@@ -48,6 +50,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    implementation("org.jsoup:jsoup:1.18.3")
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")

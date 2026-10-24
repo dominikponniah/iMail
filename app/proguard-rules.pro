@@ -7,3 +7,5 @@
 -dontwarn javax.security.sasl.**
 -dontwarn org.ietf.jgss.**
 -dontwarn sun.security.**
+-dontwarn javax.security.auth.callback.**
+-dontwarn org.graalvm.**

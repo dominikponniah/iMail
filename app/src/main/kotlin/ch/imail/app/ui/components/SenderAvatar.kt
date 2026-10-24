@@ -11,7 +11,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,9 +35,9 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SenderAvatar(address: String, name: String?, size: Dp = 40.dp, modifier: Modifier = Modifier, lookupLogo: Boolean = true) {
     val app = LocalContext.current.applicationContext as ImailApp
-    val logo by produceState<ImageBitmap?>(null, address, lookupLogo) {
-        if (!lookupLogo) return@produceState
-        value = withContext(Dispatchers.IO) { app.logos.logoFor(address)?.let { decodeDefensively(it.bytes) }?.asImageBitmap() }
+    var logo by remember(address) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(address, lookupLogo) {
+        if (lookupLogo) logo = withContext(Dispatchers.IO) { app.logos.logoFor(address)?.let { decodeDefensively(it.bytes) }?.asImageBitmap() }
     }
     val shape = CircleShape
     val bitmap = logo
