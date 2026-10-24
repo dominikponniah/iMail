@@ -16,6 +16,7 @@ import ch.imail.core.mail.MailFolder
 import ch.imail.core.mail.MailService
 import ch.imail.core.mail.MessageBody
 import ch.imail.core.mail.MessageSummary
+import ch.imail.core.mail.Outcome
 import ch.imail.core.mail.OutgoingAttachment
 import ch.imail.core.mail.OutgoingMail
 import ch.imail.core.mail.SecretProvider
@@ -45,6 +46,9 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
     var query by mutableStateOf(""); private set
     var loading by mutableStateOf(false); private set
     var offline by mutableStateOf(false); private set
+    /** Actions made offline that are waiting to be sent to the server. */
+    var pending by mutableStateOf(0); private set
+    var notice by mutableStateOf<String?>(null)
     var error by mutableStateOf<String?>(null)
     var open by mutableStateOf<MessageBody?>(null); private set
     var phonePane by mutableStateOf(PhonePane.LIST)
@@ -99,7 +103,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     fun switchAccount(id: String) {
         activeId = id; graph.settings.activeAccountId = id
-        folders = emptyList(); messages = emptyList(); open = null; query = ""; folder = "INBOX"; offline = false
+        folders = emptyList(); messages = emptyList(); open = null; query = ""; folder = "INBOX"; offline = false; pending = 0
         phonePane = PhonePane.LIST
         refreshAll()
     }
@@ -115,7 +119,17 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- loading -----------------------------------------------------------------------------------------------------
 
-    fun refreshAll() { loadFolders(); loadMessages() }
+    fun refreshAll() { flushPending { loadFolders(); loadMessages() } }
+
+    /** Applies queued offline actions (if any) before reloading. Also called when the network comes back. */
+    fun flushPending(then: () -> Unit = {}) {
+        val s = service ?: return then()
+        viewModelScope.launch {
+            val r = try { withContext(Dispatchers.IO) { s.flush() } } catch (e: Exception) { error = friendly(e); null }
+            pending = r?.remaining ?: withContext(Dispatchers.IO) { s.pendingCount() }
+            then()
+        }
+    }
 
     fun loadFolders() = launchLoading {
         val s = service ?: return@launchLoading
@@ -174,16 +188,17 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
     private fun markSeen(uid: Long, seen: Boolean) {
         messages = messages.map { if (it.uid == uid) it.copy(seen = seen) else it }
         val s = service ?: return; val f = folder
-        viewModelScope.launch(Dispatchers.IO) { runCatching { s.markSeen(f, uid, seen) } }
+        viewModelScope.launch { runCatching { withContext(Dispatchers.IO) { s.markSeen(f, uid, seen) } }; pending = s.pendingCount() }
     }
 
     fun toggleSeen(m: MessageSummary) = markSeen(m.uid, !m.seen)
 
     fun delete(uid: Long) = launchLoading {
         val s = service ?: return@launchLoading; val f = folder
-        withContext(Dispatchers.IO) { s.delete(f, uid) }
+        val outcome = withContext(Dispatchers.IO) { s.delete(f, uid) }
         messages = messages.filterNot { it.uid == uid }
         if (open?.summary?.uid == uid) closeMessage()
+        if (outcome == Outcome.QUEUED) { pending = s.pendingCount(); notice = "Offline – wird gelöscht, sobald eine Verbindung besteht." }
     }
 
     suspend fun attachment(index: Int): ByteArray {
@@ -228,7 +243,8 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         val s = service ?: return onFail()
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { s.send(mail, draft) }
+                val outcome = withContext(Dispatchers.IO) { s.send(mail, draft) }
+                if (outcome == Outcome.QUEUED) { pending = s.pendingCount(); notice = "Offline – die E-Mail wird gesendet, sobald eine Verbindung besteht." }
                 if (draft != null && folder == draft.first) messages = messages.filterNot { it.uid == draft.second }
                 onDone()
             } catch (e: Exception) { error = friendly(e); onFail() }

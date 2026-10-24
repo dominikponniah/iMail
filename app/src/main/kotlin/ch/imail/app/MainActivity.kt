@@ -91,6 +91,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (vm.account != null) vm.flushPending()
         if (locked) authenticate()
     }
 

@@ -29,6 +29,8 @@ class MailPushService : Service() {
         override fun onAvailable(network: Network) {
             if (first) { first = false; return } // fires once on registration
             restartWatchers()
+            val app = application as ImailApp
+            Thread { app.credentials.all().forEach { runCatching { app.service(it.account.id)?.flush() } } }.start() // send what was queued offline
         }
     }
 

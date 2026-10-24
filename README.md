@@ -7,6 +7,7 @@ Schlichter nativer Android-Mailclient (Kotlin, Jetpack Compose) im iOS-/iPadOS-L
 - **Anmeldung per Passwort oder OAuth2** (Google, Microsoft; XOAUTH2, Authorization Code + PKCE im Browser, Refresh-Token verschlüsselt gespeichert).
 - **Offline-Zugriff:** Ordner, Kopfzeilen, Texte und kleine Anhänge liegen verschlüsselt (AES-256-GCM, Keystore-Schlüssel) auf dem Gerät. Ohne Verbindung zeigt die App den Cache mit Hinweis „Offline“. Die neuesten 30 Mails des Posteingangs werden vorab geladen. Authentifizierungsfehler werden nie durch Cache-Daten überdeckt.
 - **Entwürfe:** werden im Entwürfe-Ordner des Servers gespeichert (auf allen Geräten sichtbar), lassen sich dort wieder öffnen, bearbeiten, ersetzen und verschwinden nach dem Senden.
+- **Vormerken ohne Verbindung:** Senden, Löschen und Gelesen/Ungelesen werden bei fehlender Verbindung verschlüsselt vorgemerkt (Reihenfolge bleibt erhalten), lokal sofort angezeigt und automatisch gesendet, sobald das Netz zurück ist (App-Start, Netzwechsel, alle ~15 Min.). Ungültige Mails werden sofort abgelehnt, Anmelde-/Zertifikatsfehler nie stillschweigend vorgemerkt; vom Server endgültig abgelehnte Aktionen werden verworfen.
 - **Avatare:** Firmenlogo der Absender-Domain, sonst Initialen auf einer pro Absender festen, zufällig wirkenden Farbe.
 
 ## OAuth2 einrichten
@@ -43,8 +44,8 @@ Google: Gmail-Scope `https://mail.google.com/` erfordert für Produktivbetrieb e
 | Test: JUnit 5, kotlin-test, GreenMail | Tests mit lokalem IMAPS/SMTPS-Server |
 
 ## Nicht enthalten (bewusst)
-Offline-Aktionen in der Warteschlange (Senden/Löschen/Flags erfordern eine Verbindung), Labels/Regeln, PGP/S-MIME, Push für andere Ordner als den Posteingang.
+Entwürfe speichern ohne Verbindung (nur Senden/Löschen/Flags werden vorgemerkt), Labels/Regeln, PGP/S-MIME, Push für andere Ordner als den Posteingang.
 
 ## Status (ehrlich)
-- **Geprüft:** `./gradlew :core:test` – 43 Tests grün: Freemail, Logo-Resolver/SSRF, HTML-Sanitizer, Links, Header-Injection, Dateinamen, **verschlüsselter Cache** (Round-Trip, kein Klartext auf der Platte, falscher Schlüssel/manipulierte Datei = Cache-Miss, Trimmen), **Offline-Modus** (Server gestoppt, Ordner/Liste/Suche/Texte weiter lesbar; falsches Passwort wird trotz Cache gemeldet), **Entwürfe** (speichern, ersetzen, aus Entwürfe-Ordner senden/entfernen), **XOAUTH2-Konfiguration**, ID-Token-Auswertung, sowie Integrationstests gegen lokalen IMAPS/SMTPS-Server (Abruf, Senden mit Anhang, IDLE-Push, Ablehnung selbstsignierter Zertifikate).
+- **Geprüft:** `./gradlew :core:test` – 48 Tests grün (u. a. vorgemerkte Aktionen: Löschen, Gelesen-Flag und Senden offline → nach Reconnect in Reihenfolge angewendet): Freemail, Logo-Resolver/SSRF, HTML-Sanitizer, Links, Header-Injection, Dateinamen, **verschlüsselter Cache** (Round-Trip, kein Klartext auf der Platte, falscher Schlüssel/manipulierte Datei = Cache-Miss, Trimmen), **Offline-Modus** (Server gestoppt, Ordner/Liste/Suche/Texte weiter lesbar; falsches Passwort wird trotz Cache gemeldet), **Entwürfe** (speichern, ersetzen, aus Entwürfe-Ordner senden/entfernen), **XOAUTH2-Konfiguration**, ID-Token-Auswertung, sowie Integrationstests gegen lokalen IMAPS/SMTPS-Server (Abruf, Senden mit Anhang, IDLE-Push, Ablehnung selbstsignierter Zertifikate).
 - **Nicht geprüft:** `app/` wurde noch nie kompiliert und der **OAuth-Ablauf** nie gegen Google/Microsoft ausgeführt (kein Android SDK, Google-Hosts in der Entwicklungsumgebung gesperrt; XOAUTH2 gegen einen echten Server ebenfalls nicht). Ebenso offen: `lintDebug`, Previews, Verhalten auf einem Gerät (Push im Hintergrund, Biometrie, WebView, Browser-Redirect). Beim ersten Build sind Compile-Korrekturen zu erwarten.

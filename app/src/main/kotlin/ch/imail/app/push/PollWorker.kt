@@ -22,6 +22,7 @@ class PollWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         for (stored in app.credentials.all()) {
             val account = stored.account
             try {
+                app.service(account.id)?.flush()
                 val newer = ImapClient(account, app.secretFor(account.id)).listMessages("INBOX", 20)
                     .filter { !it.seen && it.uid > app.settings.lastNotifiedUid(account.id) }
                 if (newer.isNotEmpty()) {

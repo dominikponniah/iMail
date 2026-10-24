@@ -102,6 +102,9 @@ fun MailApp(vm: MailViewModel, width: WindowWidthSizeClass, lockEnabled: Boolean
 
     composing?.let { seed -> ComposeSheet(vm, seed, onDismiss = { composing = null }) }
     if (showSettings) SettingsDialog(vm, lockEnabled, onToggleLock, onDismiss = { showSettings = false })
+    vm.notice?.let { msg ->
+        AlertDialog(onDismissRequest = { vm.notice = null }, confirmButton = { TextButton({ vm.notice = null }) { Text("OK") } }, title = { Text("Vorgemerkt") }, text = { Text(msg) })
+    }
     vm.error?.let { msg ->
         AlertDialog(
             onDismissRequest = { vm.error = null }, confirmButton = { TextButton({ vm.error = null }) { Text("OK") } },
@@ -187,8 +190,8 @@ private fun MessageListPane(vm: MailViewModel, modifier: Modifier, onCompose: ()
             Row { NavText("Aktualisieren") { vm.loadMessages() }; NavText("Neu", bold = true, onClick = onCompose) }
         }
         LargeTitle(title)
-        if (vm.offline) Text(
-            "Offline – gespeicherte E-Mails", style = IosType.footnote, color = c.secondaryLabel,
+        if (vm.offline || vm.pending > 0) Text(
+            (if (vm.offline) "Offline – gespeicherte E-Mails" else "Synchronisiere…") + if (vm.pending > 0) " · ${vm.pending} vorgemerkt" else "", style = IosType.footnote, color = c.secondaryLabel,
             modifier = Modifier.fillMaxWidth().background(c.fill).padding(horizontal = 16.dp, vertical = 6.dp),
         )
         SearchField(vm.query, vm::search, "Suchen")

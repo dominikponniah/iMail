@@ -8,6 +8,7 @@ import ch.imail.app.data.CredentialStore
 import ch.imail.app.data.DiskLogoCache
 import ch.imail.app.data.OAuthManager
 import ch.imail.core.cache.MailCache
+import ch.imail.core.cache.PendingQueue
 import ch.imail.core.logo.LogoFetcher
 import ch.imail.core.logo.LogoService
 import ch.imail.core.logo.MemoryLogoCache
@@ -47,7 +48,11 @@ class ImailApp : Application() {
     fun service(accountId: String): MailService? {
         services[accountId]?.let { return it }
         val stored = credentials.get(accountId) ?: return null
-        return MailService(stored.account, secretFor(accountId), MailCache(cacheDir(accountId), credentials.cacheCrypto()))
+        return MailService(
+            stored.account, secretFor(accountId),
+            MailCache(cacheDir(accountId), credentials.cacheCrypto()),
+            PendingQueue(java.io.File(cacheDir(accountId), "outbox.bin"), credentials.cacheCrypto()),
+        )
             .also { services[accountId] = it }
     }
 

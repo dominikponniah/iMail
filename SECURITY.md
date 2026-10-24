@@ -28,6 +28,6 @@ Vertraulichkeit der Zugangsdaten und Mails auf dem Gerät und im Netz, Integrit�
 - Der Keystore-Schlüssel verlangt keine Nutzerauthentifizierung, weil der Push-Dienst im Hintergrund lesen muss. Schutz der UI: App-Sperre.
 - Ein ständiger IDLE-Dienst kostet Akku; Android kann ihn trotz Foreground-Service beenden. Fallback: WorkManager (~15 Min.). Für Play-Store-Veröffentlichung ist die Foreground-Service-Art `specialUse` zu begründen.
 - Der Offline-Cache enthält Mail-Texte; wer das entsperrte Gerät samt App-Sandbox kontrolliert (Root), kann den Keystore-Schlüssel benutzen. Die App-Sperre schützt die Oberfläche, nicht die Dateien selbst.
-- Aktionen ohne Verbindung (Senden, Löschen, Flags) werden nicht zwischengespeichert.
+- Vorgemerkte Aktionen (inkl. Mail-Text und Anhänge) liegen bis zur Zustellung verschlüsselt im Gerätespeicher (gleicher Keystore-Schutz wie der Cache). Anmelde- und Zertifikatsfehler werden nicht vorgemerkt, sondern angezeigt.
 - Kein S/MIME/PGP, keine Zertifikats-Pinning-Konfiguration pro Server.
 - Abhängigkeiten sind auf feste Versionen gepinnt; vor Releases auf bekannte CVEs prüfen.
