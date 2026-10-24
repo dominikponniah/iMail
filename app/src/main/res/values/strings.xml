@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">iMail</string>
+    <string name="channel_new_mail">Neue E-Mails</string>
+    <string name="channel_service">Verbindung</string>
+    <string name="service_title">Postfach wird überwacht</string>
+    <string name="service_text">Verbunden für Benachrichtigungen</string>
+    <string name="new_mail_title">Neue E-Mail</string>
+    <string name="new_mails_title">%d neue E-Mails</string>
+    <string name="new_mail_hidden">Neue Nachricht</string>
+    <string name="unlock_title">iMail entsperren</string>
+    <string name="unlock_subtitle">Bestätige deine Identität</string>
+</resources>

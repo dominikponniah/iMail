@@ -1,0 +1,9 @@
+# Angus Mail / Jakarta Activation load providers reflectively.
+-keep class org.eclipse.angus.** { *; }
+-keep class jakarta.mail.** { *; }
+-keep class jakarta.activation.** { *; }
+-dontwarn java.awt.**
+-dontwarn javax.naming.**
+-dontwarn javax.security.sasl.**
+-dontwarn org.ietf.jgss.**
+-dontwarn sun.security.**
